@@ -45,7 +45,7 @@ Aberta direto pela Vercel, a tela mostra "Atendimento não identificado". É o e
 
 ## 3. Template em cada número
 
-O modelo de cada número fica em `MAPA_TEMPLATE`, no nó *Validar pedido*: chave = DDD + número, `id` = ID do modelo no Helena (a API de envio só aceita o ID) e `variaveis` = variáveis que o texto usa. O fluxo não consulta o modelo antes: envia direto, e se ele não estiver aprovado o próprio Helena recusa e a tela mostra o motivo.
+O modelo de cada número fica em `MAPA_TEMPLATE`, no nó *Validar pedido*: chave = DDD + número, `id` = código do modelo como aparece no Helena (ex.: `d94b6_tranferencia`) e `variaveis` = variáveis que o texto usa. O fluxo não consulta o modelo antes: envia direto, e se ele não estiver aprovado o próprio Helena recusa e a tela mostra o motivo.
 
 Variáveis que o fluxo preenche sozinho (liste em `variaveis` as que o modelo usa):
 
