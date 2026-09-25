@@ -1,64 +1,85 @@
-# Transferência de atendimento entre números (Helena)
+# Transferência de atendimento entre números (Helena + n8n)
 
-Tela aberta por um botão (ação personalizada) dentro da conversa no Helena. O atendente escolhe outro número da conta e o sistema:
+Botão (ação personalizada) dentro da conversa no Helena que abre uma tela onde o atendente escolhe outro número da conta. O cliente recebe um modelo de mensagem (template) por esse número e, se marcado, o atendimento atual é concluído.
 
-1. envia um modelo de mensagem (template) ao cliente **pelo número escolhido** (abre um novo atendimento nesse número);
-2. se a opção estiver marcada, conclui o atendimento atual.
-
-Não precisa de n8n: a própria Vercel roda o backend (`/api`), e o token do Helena fica guardado nela, fora do navegador.
+## Como funciona
 
 ```
-public/index.html   tela
-api/canais.js       GET  /api/canais      lista os números da conta + dados do atendimento
-api/transferir.js   POST /api/transferir  envia o template e conclui o atendimento original
-lib/helena.js       chamadas à API do Helena
+Botão no Helena
+   │  https://SEU-N8N/webhook/transferencia-canal?k=CHAVE&sessionId=...
+   ▼
+n8n · Webhook Tela ──► lista os canais da conta (API Helena)
+                   ──► busca o atendimento (cliente + número atual)
+                   ──► baixa o HTML da Vercel e coloca os dados dentro
+                   ──► responde a página pro atendente
+   │
+   │  atendente escolhe o número e clica em Transferir
+   ▼
+n8n · Webhook Transferir ──► confere destino e cliente
+                         ──► acha o template aprovado no número escolhido
+                         ──► envia o template por esse número
+                         ──► conclui o atendimento original (opcional)
 ```
 
-## 1. Deploy na Vercel
+A Vercel só hospeda o HTML (`public/index.html`). Pra mudar a tela é só editar no GitHub; a Vercel publica sozinha e o n8n já pega a versão nova.
 
-1. Na Vercel: **Add New… → Project → Import** o repositório `transferenciadeinstacia`. Framework: **Other**. Não precisa de comando de build.
-2. Em **Settings → Environment Variables**, cadastre:
+```
+public/index.html               tela
+n8n/transferencia-canal.json    fluxo pra importar no n8n
+```
 
-| Variável | Obrigatória | O que é |
-|---|---|---|
-| `HELENA_TOKEN` | sim | Token do Helena (Configurações → Integrações → Integração via API) |
-| `ACCESS_KEY` | sim | Senha longa e aleatória que vai no link do botão (`?k=`) |
-| `TEMPLATE_NAME` | não | Nome do template procurado em cada número. Padrão: `transferencia_atendimento` |
-| `TEMPLATE_MAP` | não | JSON `{"<id ou número do canal>": "<templateId>"}` pra número com template de outro nome |
-| `CANAIS_PERMITIDOS` | não | Ids ou números separados por vírgula, pra mostrar só alguns |
-| `NOMES_CANAIS` | não | JSON `{"<id ou número>": "Loja Centro"}` pra renomear na tela |
+## 1. Vercel
 
-3. Faça um novo deploy depois de salvar as variáveis (elas só valem a partir do próximo deploy).
+**Add New… → Project → Import** este repositório. Framework **Other**, sem build. Anote a URL (ex.: `https://transferenciadeinstacia.vercel.app`).
 
-## 2. Template em cada número
+Aberta direto pela Vercel, a tela mostra "Atendimento não identificado". É o esperado: os dados só chegam quando ela passa pelo n8n.
 
-Cada número de destino precisa ter um template **aprovado** com o nome definido em `TEMPLATE_NAME` (o id do template muda de número pra número; a tela procura pelo nome automaticamente).
+## 2. n8n
 
-Variáveis que a tela preenche sozinha, se existirem no template: `nome` / `primeiro_nome` / `nome_cliente` (primeiro nome do cliente), `nome_completo`, `telefone`, `empresa_origem` / `canal_origem` (nome do número atual).
+1. **Importe** `n8n/transferencia-canal.json` (Workflows → Import from file).
+2. **Credencial do Helena:** crie uma credencial *Header Auth* com Name `Authorization` e Value `Bearer SEU_TOKEN` (token em Configurações → Integrações → Integração via API do Helena). Selecione essa credencial nos 7 nós HTTP que chamam `api.helena.run`.
+3. **Baixar HTML (Vercel):** troque `https://SEU-PROJETO.vercel.app/` pela URL da Vercel.
+4. **Chave de acesso:** troque `TROCAR_POR_CHAVE_FORTE` por uma senha longa e aleatória nos **dois** nós IF: `Chave válida (tela)?` e `Chave válida?`.
+5. **Validar pedido:** ajuste `TEMPLATE_NAME` se o template tiver outro nome.
+6. **Ative** o workflow. O botão precisa usar a URL de produção (`/webhook/`), não a de teste (`/webhook-test/`).
 
-## 3. Botão no Helena
+## 3. Template em cada número
+
+Cada número de destino precisa ter um template **aprovado** com o nome definido em `TEMPLATE_NAME` (padrão `transferencia_atendimento`). Como o id do template muda de número pra número, o fluxo procura pelo nome. Se algum número usar outro template, cadastre em `MAPA_TEMPLATE` no nó *Validar pedido*.
+
+Variáveis que o fluxo preenche sozinho, se existirem no template:
+
+| Variável | Valor |
+|---|---|
+| `nome`, `primeiro_nome`, `nome_cliente` | primeiro nome do cliente |
+| `nome_completo` | nome completo |
+| `telefone` | telefone do cliente |
+| `empresa_origem`, `canal_origem` | nome do número atual |
+
+Qualquer outra variável vai como `-`.
+
+## 4. Botão no Helena
 
 Configurações → Ações e menus personalizados → **Ações personalizadas** → nova ação:
 
-- Local: cabeçalho do chat (ou rodapé)
+- Local: cabeçalho do chat
 - Comportamento: **Abrir popup** (ou nova aba)
 - URL:
 
 ```
-https://SEU-PROJETO.vercel.app/?k=SUA_ACCESS_KEY&sessionId={{<tag do id do atendimento>}}
+https://SEU-N8N/webhook/transferencia-canal?k=SUA_CHAVE&sessionId={{<tag do id do atendimento>}}
 ```
 
-Use a tag azul que o Helena mostra embaixo do campo de URL para o **id do atendimento/sessão**. Se não houver essa tag, dá pra usar só o telefone:
+Use a tag azul que o Helena mostra embaixo do campo de URL para o **id do atendimento**. Se não houver essa tag, dá pra usar só o telefone:
 
 ```
-https://SEU-PROJETO.vercel.app/?k=SUA_ACCESS_KEY&telefone={{telefone_do_contato}}
+https://SEU-N8N/webhook/transferencia-canal?k=SUA_CHAVE&telefone={{telefone_do_contato}}
 ```
 
-Só com o telefone o template é enviado normalmente, mas a tela não sabe qual é o número atual nem consegue encerrar o atendimento original.
+Só com o telefone o template é enviado normalmente, mas a tela não sabe qual é o número atual e não consegue concluir o atendimento original.
 
-## Testar local
+## Opções no nó *Montar página*
 
-```
-cp .env.example .env   # e preencha
-npm run dev            # http://localhost:3000/?k=...&sessionId=...
-```
+- `NOMES`: renomear números na tela, ex. `{ '5582999990001': 'Loja Centro' }`
+- `PERMITIDOS`: mostrar só alguns números, ex. `['5582999990001', '5582999990002']`
+- `WEBHOOK_TRANSFERIR`: só preencha se o n8n estiver atrás de um proxy e a URL automática sair errada.

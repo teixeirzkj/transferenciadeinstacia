@@ -1,0 +1,913 @@
+{
+  "name": "[Transferência de canal] Tela + envio de template",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "transferencia-canal",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f6c1c914-00b9-4b8f-875f-2705c15b260e",
+      "name": "Webhook Tela",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "2ff205a3-85f7-4ae1-a267-5b33cb767e3b"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "7756b5fe-0b1d-4b96-8ff1-9eaed934007b",
+              "leftValue": "={{ $json.query.k }}",
+              "rightValue": "TROCAR_POR_CHAVE_FORTE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "894d6419-ded7-4148-8d15-d7d686bde4c7",
+      "name": "Chave válida (tela)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<!DOCTYPE html><meta charset=\"utf-8\"><body style=\"font-family:system-ui;padding:32px\">Link sem permissão. Abra a tela pelo botão dentro da conversa.</body>",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "ba650162-6d88-4012-baa6-bbadda3b4f85",
+      "name": "Responder 401 (tela)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.helena.run/chat/v1/channel?ChannelType=Whatsapp",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a695bfe9-1f90-4b32-beb2-674292daa9b7",
+      "name": "Listar canais",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -20
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.helena.run/chat/v2/session/{{ $('Webhook Tela').first().json.query.sessionId || 'sem-sessao' }}?includeDetails=ContactDetails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "07c51e4a-5fc9-4b58-aa4d-5ce66cac5a51",
+      "name": "Buscar sessão",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        -20
+      ],
+      "executeOnce": true,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://SEU-PROJETO.vercel.app/",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "fc7a7199-b8d1-412f-9f38-1115f655eb5d",
+      "name": "Baixar HTML (Vercel)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        -20
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================= CONFIG =================\n// URL do Webhook Transferir. Vazio = monta sozinho com o domínio deste n8n.\nconst WEBHOOK_TRANSFERIR = '';\n// Opcional: renomear números na tela  { '5582999990001': 'Loja Centro' }\nconst NOMES = {};\n// Opcional: mostrar só estes números (vazio = todos)\nconst PERMITIDOS = [];\n// ==========================================\n\nconst d = (v) => String(v || '').replace(/\\D/g, '');\nconst wh = $('Webhook Tela').first().json;\nconst q = wh.query || {};\nconst h = wh.headers || {};\n\nconst brutos = $('Listar canais').all().map((i) => i.json);\nconst falhouLista = brutos.length > 0 && brutos.every((c) => c.error);\nconst canais = brutos\n  .filter((c) => c && !c.error && c.id && c.active !== false && d(c.number))\n  .map((c) => ({\n    id: c.id,\n    telefone: d(c.number),\n    nome: NOMES[d(c.number)] || NOMES[c.id] || c.identity?.displayName || c.numberFormatted || d(c.number),\n  }))\n  .filter((c) => !PERMITIDOS.length || PERMITIDOS.includes(c.telefone) || PERMITIDOS.includes(c.id))\n  .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));\n\nconst s = $('Buscar sessão').first().json || {};\nconst temSessao = !s.error && !!s.id;\n\nconst host = h['x-forwarded-host'] || h.host;\nconst proto = String(h['x-forwarded-proto'] || 'https').split(',')[0];\n\nlet erro = '';\nif (falhouLista) erro = 'Não consegui listar os números da conta. Verifique a credencial do Helena no n8n.';\nelse if (q.sessionId && !temSessao) erro = 'Não achei esse atendimento no Helena.';\n\nconst dados = {\n  k: q.k || '',\n  sessionId: temSessao ? s.id : '',\n  canalAtualId: temSessao ? (s.channelId || '') : '',\n  cliente: {\n    nome: (temSessao && s.contactDetails?.name) || q.nome || '',\n    telefone: d((temSessao && s.contactDetails?.phonenumber) || q.telefone),\n  },\n  canais,\n  webhookTransferir: WEBHOOK_TRANSFERIR || proto + '://' + host + '/webhook/transferir-canal',\n  erro,\n};\n\nconst html = String($input.first().json.data || '');\nif (!html.includes('__DADOS__')) {\n  throw new Error('O HTML baixado da Vercel não tem o marcador de dados. Confira a URL no nó \"Baixar HTML (Vercel)\".');\n}\n// \"<\" escapado pra nenhum texto conseguir fechar a tag <script>\nconst json = JSON.stringify(dados).replace(/</g, '\\\\u003c');\nreturn [{ json: { html: html.split('__DADOS__').join(json) } }];"
+      },
+      "id": "ad38cdaa-1e21-4574-ae07-bbdfe063b099",
+      "name": "Montar página",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "id": "cc9366b6-da70-4633-9e76-f02a25027d67",
+      "name": "Responder HTML",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "transferir-canal",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "323cfdd5-1d7c-40b9-875e-6d9fe5d3d766",
+      "name": "Webhook Transferir",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        500
+      ],
+      "webhookId": "91f1f9fe-14e1-458a-8743-1ccf1b1baaed"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c67cab1c-8828-4936-80e3-db7fe0224181",
+              "leftValue": "={{ $json.body.k }}",
+              "rightValue": "TROCAR_POR_CHAVE_FORTE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1a7bbdd5-6c29-4534-8f5d-f85928e87164",
+      "name": "Chave válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        220,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": false, \"erro\": \"Acesso não autorizado.\" } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "26bcf7dc-a65c-4f8d-95a8-2afa81490925",
+      "name": "Responder 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.helena.run/chat/v1/channel?ChannelType=Whatsapp",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "737c3e78-a7d1-4a5d-a0a1-961588db2f16",
+      "name": "Listar canais (T)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.helena.run/chat/v2/session/{{ $('Webhook Transferir').first().json.body.sessionId || 'sem-sessao' }}?includeDetails=ContactDetails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "277dbc88-7d3a-49b2-af34-83576740cdab",
+      "name": "Buscar sessão (T)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        480
+      ],
+      "executeOnce": true,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================= CONFIG =================\n// Nome do template aprovado que existe em CADA número de destino\nconst TEMPLATE_NAME = 'transferencia_atendimento';\n// Opcional: número que usa template com outro nome -> id do template\n// { '5582999990001': '3fa85f64-5717-4562-b3fc-2c963f66afa6' }\nconst MAPA_TEMPLATE = {};\n// ==========================================\n\nconst d = (v) => String(v || '').replace(/\\D/g, '');\nconst b = $('Webhook Transferir').first().json.body || {};\nconst falha = (erro) => [{ json: { ok: false, erro } }];\n\nconst canais = $('Listar canais (T)').all().map((i) => i.json)\n  .filter((c) => c && !c.error && c.id && d(c.number));\nconst nomeDe = (c) => c.identity?.displayName || c.numberFormatted || d(c.number);\n\nconst s = $input.first().json || {};\nconst temSessao = !s.error && !!s.id;\nconst canalAtualId = temSessao ? s.channelId : '';\nconst cliente = {\n  nome: (temSessao && s.contactDetails?.name) || b.nome || '',\n  telefone: d((temSessao && s.contactDetails?.phonenumber) || b.telefone),\n};\n\n// O telefone de destino sai da lista da conta, nunca do navegador.\nconst destino = canais.find((c) => c.id === b.canalDestinoId);\nconst origem = canais.find((c) => c.id === canalAtualId);\n\nif (!canais.length) return falha('Não consegui listar os números da conta. Verifique a credencial do Helena no n8n.');\nif (!destino) return falha('Número de destino inválido.');\nif (destino.id === canalAtualId) return falha('Esse já é o número do atendimento atual.');\nif (b.sessionId && !temSessao) return falha('Não achei esse atendimento no Helena.');\nif (!cliente.telefone) return falha('Não achei o telefone do cliente nesse atendimento.');\n\nreturn [{ json: {\n  ok: true,\n  sessionId: temSessao ? s.id : '',\n  encerrar: b.encerrarOrigem === true && temSessao,\n  cliente,\n  destino: { id: destino.id, telefone: d(destino.number), nome: nomeDe(destino) },\n  origemNome: origem ? nomeDe(origem) : '',\n  templateName: TEMPLATE_NAME,\n  templateIdFixo: MAPA_TEMPLATE[d(destino.number)] || MAPA_TEMPLATE[destino.id] || '',\n} }];"
+      },
+      "id": "8ea146fe-bd06-423d-b92f-6519a1db95bb",
+      "name": "Validar pedido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "f5c82edc-0526-4e43-bea4-d4184eb1b833",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a2a85329-9d32-48cc-b2a8-d2c6fad463c0",
+      "name": "Pedido ok?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": false, \"erro\": $json.erro } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "b1ba5bb6-de8c-47b5-8dd5-81c1d721ea5f",
+      "name": "Responder erro",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.helena.run/chat/v1/template?channelId={{ $json.destino.id }}&approvedOnly=true&archived=false&pageSize=100{{ $json.templateIdFixo ? '' : '&name=' + encodeURIComponent($json.templateName) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "22a3fd07-f646-4d33-ad0a-4608ca7670de",
+      "name": "Buscar template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        460
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Validar pedido').first().json;\nconst r = $input.first().json || {};\nconst itens = Array.isArray(r.items) ? r.items : [];\n\nconst tpl = p.templateIdFixo\n  ? (itens.find((t) => t.id === p.templateIdFixo) || { id: p.templateIdFixo, params: [] })\n  : itens.find((t) => t.name === p.templateName);\n\nif (!tpl) {\n  return [{ json: { ok: false, erro: 'O número ' + p.destino.nome + ' não tem template aprovado chamado \"' + p.templateName + '\".' } }];\n}\n\n// Variáveis do template preenchidas com o que se sabe do cliente.\n// A Meta recusa variável vazia, então sempre vai algum valor.\nconst primeiro = (p.cliente.nome || '').trim().split(/\\s+/)[0] || '';\nconst valores = {\n  nome: primeiro, primeiro_nome: primeiro, nome_cliente: primeiro,\n  nome_completo: (p.cliente.nome || '').trim(),\n  telefone: p.cliente.telefone,\n  empresa_origem: p.origemNome, canal_origem: p.origemNome,\n};\nconst parameters = {};\nfor (const par of (tpl.params || [])) {\n  const k = String(par.name || '');\n  if (!k) continue;\n  const v = valores[k.toLowerCase()] ?? (k.toLowerCase().includes('nome') ? primeiro : '');\n  parameters[k] = v || (k.toLowerCase().includes('nome') ? 'cliente' : '-');\n}\n\nconst body = { templateId: tpl.id };\nif (Object.keys(parameters).length) body.parameters = parameters;\n\nreturn [{ json: {\n  ok: true,\n  payload: {\n    from: p.destino.telefone,\n    to: p.cliente.telefone,\n    body,\n    options: { enableBot: false, hiddenSession: false, forceStartSession: true },\n  },\n} }];"
+      },
+      "id": "138ec0fc-a9a3-4425-a451-6b75a4688648",
+      "name": "Montar envio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a257074b-efd2-436a-832f-a999e765c830",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d6d8471-370b-4dbf-a08e-061750d0d837",
+      "name": "Pode enviar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.helena.run/chat/v1/message/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}"
+      },
+      "id": "8f899822-b1d4-46c5-890e-b32198724f43",
+      "name": "Enviar template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        420
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": false, \"erro\": \"Falha na API do Helena: \" + ($json.error?.message || $json.message || \"erro desconhecido\") } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "c35cae75-e5b7-4c1a-9f69-96cdfb716f1f",
+      "name": "Responder erro API",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $input.first().json || {};\nconst p = $('Validar pedido').first().json;\nif (m.status === 'FAILED') {\n  return [{ json: { ok: false, erro: 'O Helena recusou o envio: ' + (m.failureReason || 'motivo não informado') } }];\n}\nreturn [{ json: { ok: true, encerrar: p.encerrar, sessionId: p.sessionId, novoSessionId: m.sessionId || null } }];"
+      },
+      "id": "23a3c50d-388b-48d5-8cea-6b035ae402bb",
+      "name": "Conferir envio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "e15bd09f-aad4-499c-8b1d-06baf69b313e",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ca5ce1d3-8148-4966-b67f-738088996fe6",
+      "name": "Enviado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "16096873-bb83-4311-8ad7-b6482d39623a",
+              "leftValue": "={{ $json.encerrar }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b14d6842-dd49-49d5-927a-70ba624e9695",
+      "name": "Encerrar origem?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.helena.run/chat/v1/session/{{ $json.sessionId }}/complete",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"reactivateOnNewMessage\": false, \"stopBotInExecution\": true }"
+      },
+      "id": "42a3b8ef-0ecc-4826-bff9-3c98a75af6f3",
+      "name": "Concluir sessão original",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true, \"encerrado\": $('Concluir sessão original').isExecuted && !$('Concluir sessão original').first().json.error } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "46dc8559-750d-41b0-afb8-8fd6804be402",
+      "name": "Responder OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3080,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Tela": {
+      "main": [
+        [
+          {
+            "node": "Chave válida (tela)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chave válida (tela)?": {
+      "main": [
+        [
+          {
+            "node": "Listar canais",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 401 (tela)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar canais": {
+      "main": [
+        [
+          {
+            "node": "Buscar sessão",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar sessão": {
+      "main": [
+        [
+          {
+            "node": "Baixar HTML (Vercel)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baixar HTML (Vercel)": {
+      "main": [
+        [
+          {
+            "node": "Montar página",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar página": {
+      "main": [
+        [
+          {
+            "node": "Responder HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Transferir": {
+      "main": [
+        [
+          {
+            "node": "Chave válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chave válida?": {
+      "main": [
+        [
+          {
+            "node": "Listar canais (T)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar canais (T)": {
+      "main": [
+        [
+          {
+            "node": "Buscar sessão (T)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar sessão (T)": {
+      "main": [
+        [
+          {
+            "node": "Validar pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar pedido": {
+      "main": [
+        [
+          {
+            "node": "Pedido ok?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pedido ok?": {
+      "main": [
+        [
+          {
+            "node": "Buscar template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar template": {
+      "main": [
+        [
+          {
+            "node": "Montar envio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder erro API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar envio": {
+      "main": [
+        [
+          {
+            "node": "Pode enviar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pode enviar?": {
+      "main": [
+        [
+          {
+            "node": "Enviar template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar template": {
+      "main": [
+        [
+          {
+            "node": "Conferir envio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder erro API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir envio": {
+      "main": [
+        [
+          {
+            "node": "Enviado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviado?": {
+      "main": [
+        [
+          {
+            "node": "Encerrar origem?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encerrar origem?": {
+      "main": [
+        [
+          {
+            "node": "Concluir sessão original",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Concluir sessão original": {
+      "main": [
+        [
+          {
+            "node": "Responder OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

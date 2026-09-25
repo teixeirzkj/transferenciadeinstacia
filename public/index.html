@@ -9,6 +9,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!--
+  Esta página é servida pelo n8n (Webhook Tela). O nó "Montar página" baixa este
+  arquivo da Vercel e troca o marcador abaixo pelos dados (canais, atendimento etc.).
+  Aberta direto na Vercel, sem passar pelo n8n, ela só mostra o aviso de erro.
+-->
+<script id="dados" type="application/json">__DADOS__</script>
+
 <style>
   :root {
     --bg: #E9EEF0;
@@ -120,9 +128,6 @@
   .tel { color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
   .tag { margin-left: auto; font-size: .78rem; color: var(--muted); white-space: nowrap; }
 
-  .esqueleto { height: 64px; border-radius: 10px; background: var(--line); opacity: .5; animation: pulsa 1.2s ease-in-out infinite; }
-  @keyframes pulsa { 50% { opacity: .25; } }
-
   .check {
     display: flex; align-items: center; gap: 8px;
     color: var(--muted); margin: 0 0 18px; cursor: pointer; user-select: none;
@@ -172,16 +177,14 @@
 
     <input class="busca" id="busca" type="search" placeholder="Buscar número ou nome" aria-label="Buscar número ou nome" hidden>
 
-    <fieldset class="lista" id="lista" aria-label="Número de destino" aria-busy="true">
-      <div class="esqueleto"></div><div class="esqueleto"></div><div class="esqueleto"></div>
-    </fieldset>
+    <fieldset class="lista" id="lista" aria-label="Número de destino"></fieldset>
 
     <label class="check">
       <input type="checkbox" id="encerrar" checked>
       Encerrar o atendimento atual após transferir
     </label>
 
-    <button id="btn" type="button" disabled>Carregando…</button>
+    <button id="btn" type="button" disabled>Selecione um número</button>
   </div>
 
   <div id="tela-ok" hidden>
@@ -194,17 +197,10 @@
 </main>
 
 <script>
-  // Parâmetros que o botão do Helena coloca na URL. Aceita alguns nomes diferentes
-  // pra não depender do nome exato da variável que o Helena gera.
-  const params = new URLSearchParams(window.location.search);
-  const pegar = (...nomes) => { for (const n of nomes) { const v = params.get(n); if (v && !/^\{\{.*\}\}$/.test(v)) return v.trim(); } return ''; };
-
-  const k = pegar('k', 'key', 'chave');
-  const entrada = {
-    sessionId: pegar('sessionId', 'session_id', 'sessao', 'atendimento', 'id_atendimento', 'id_da_sessao'),
-    telefone: pegar('telefone', 'phone', 'telefone_do_contato'),
-    nome: pegar('nome', 'name', 'nome_do_contato'),
-  };
+  // Dados colocados pelo n8n no bloco "dados" lá em cima:
+  // { k, sessionId, canalAtualId, cliente: { nome, telefone }, canais: [{ id, nome, telefone }], webhookTransferir, erro }
+  let dados = null;
+  try { dados = JSON.parse(document.getElementById('dados').textContent); } catch (e) {}
 
   const $lista = document.getElementById('lista');
   const $btn = document.getElementById('btn');
@@ -212,8 +208,9 @@
   const $encerrar = document.getElementById('encerrar');
   const $busca = document.getElementById('busca');
 
-  let canais = [];
-  let ctx = null;
+  const canais = (dados && Array.isArray(dados.canais)) ? dados.canais : [];
+  const cliente = (dados && dados.cliente) || {};
+  const identificado = !!(dados && (dados.sessionId || cliente.telefone));
   let selecionado = null;
   let enviando = false;
 
@@ -228,7 +225,7 @@
 
   function atualizarBotao() {
     if (enviando) return;
-    if (!ctx) { $btn.disabled = true; $btn.textContent = 'Atendimento não identificado'; return; }
+    if (!identificado) { $btn.disabled = true; $btn.textContent = 'Atendimento não identificado'; return; }
     $btn.disabled = !selecionado;
     $btn.textContent = selecionado ? 'Transferir para ' + selecionado.nome : 'Selecione um número';
   }
@@ -243,19 +240,18 @@
 
   function renderizar() {
     $lista.innerHTML = '';
-    $lista.removeAttribute('aria-busy');
     if (!canais.length) return vazio('Nenhum número disponível para transferência.');
 
     const filtro = $busca.value.trim().toLowerCase();
     const filtroDig = filtro.replace(/\D/g, '');
     const visiveis = canais.filter(function (c) {
       if (!filtro) return true;
-      return c.nome.toLowerCase().includes(filtro) || (filtroDig && c.telefone.includes(filtroDig));
+      return String(c.nome).toLowerCase().includes(filtro) || (filtroDig && String(c.telefone).includes(filtroDig));
     });
     if (!visiveis.length) return vazio('Nada encontrado.');
 
     visiveis.forEach(function (c) {
-      const atual = ctx && ctx.canalAtualId && c.id === ctx.canalAtualId;
+      const atual = dados.canalAtualId && c.id === dados.canalAtualId;
       const label = document.createElement('label');
       label.className = 'opcao' + (atual ? ' atual' : '');
 
@@ -274,7 +270,7 @@
       info.className = 'info';
       const nome = document.createElement('span');
       nome.className = 'nome';
-      nome.textContent = c.nome;
+      nome.textContent = c.nome || 'Sem nome';
       const tel = document.createElement('span');
       tel.className = 'tel';
       tel.textContent = formatarTel(c.telefone);
@@ -291,62 +287,22 @@
     });
   }
 
-  async function carregar() {
-    if (!entrada.sessionId && !entrada.telefone) {
-      mostrarErro('Não foi possível identificar o atendimento. Abra esta tela pelo botão dentro da conversa.');
-      vazio('Nenhum número carregado.');
-      atualizarBotao();
-      return;
-    }
-    try {
-      const q = new URLSearchParams({ k: k });
-      if (entrada.sessionId) q.set('sessionId', entrada.sessionId);
-      if (entrada.telefone) q.set('telefone', entrada.telefone);
-      if (entrada.nome) q.set('nome', entrada.nome);
-
-      const resp = await fetch('/api/canais?' + q.toString(), { cache: 'no-store' });
-      const data = await resp.json().catch(function () { return {}; });
-      if (!resp.ok || !data.ok) throw new Error(data.erro || 'Erro ' + resp.status + ' ao carregar os números.');
-
-      canais = data.canais || [];
-      ctx = { sessionId: data.sessionId, canalAtualId: data.canalAtualId, cliente: data.cliente || {} };
-
-      const cli = ctx.cliente;
-      if (cli.nome || cli.telefone) {
-        document.getElementById('cliente-txt').textContent =
-          [cli.nome, formatarTel(cli.telefone)].filter(Boolean).join(' · ');
-        document.getElementById('cliente').hidden = false;
-      }
-      if (!ctx.sessionId) {
-        $encerrar.checked = false;
-        $encerrar.disabled = true;
-        $encerrar.parentElement.title = 'Sem o id do atendimento não dá pra encerrar automaticamente.';
-      }
-      $busca.hidden = canais.length < 6;
-      renderizar();
-    } catch (e) {
-      mostrarErro(e.message || 'Não consegui carregar os números.');
-      vazio('Nenhum número carregado.');
-    }
-    atualizarBotao();
-  }
-
   async function transferir() {
-    if (!selecionado || !ctx || enviando) return;
+    if (!selecionado || !identificado || enviando) return;
     enviando = true;
     $aviso.hidden = true;
     $btn.disabled = true;
     $btn.innerHTML = '<span class="spin" aria-hidden="true"></span>Transferindo…';
 
     try {
-      const resp = await fetch('/api/transferir', {
+      const resp = await fetch(dados.webhookTransferir, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          k: k,
-          sessionId: entrada.sessionId || null,
-          telefone: entrada.telefone || null,
-          nome: entrada.nome || null,
+          k: dados.k,
+          sessionId: dados.sessionId || null,
+          telefone: cliente.telefone || null,
+          nome: cliente.nome || null,
           canalDestinoId: selecionado.id,
           encerrarOrigem: $encerrar.checked,
         }),
@@ -377,7 +333,27 @@
     document.getElementById('tela-form').hidden = false;
   });
 
-  carregar();
+  if (!dados) {
+    mostrarErro('Não foi possível identificar o atendimento. Abra esta tela pelo botão dentro da conversa.');
+    vazio('Nenhum número carregado.');
+  } else {
+    if (dados.erro) mostrarErro(dados.erro);
+    else if (!identificado) mostrarErro('Não foi possível identificar o atendimento. Abra esta tela pelo botão dentro da conversa.');
+
+    if (cliente.nome || cliente.telefone) {
+      document.getElementById('cliente-txt').textContent =
+        [cliente.nome, formatarTel(cliente.telefone)].filter(Boolean).join(' · ');
+      document.getElementById('cliente').hidden = false;
+    }
+    if (!dados.sessionId) {
+      $encerrar.checked = false;
+      $encerrar.disabled = true;
+      $encerrar.parentElement.title = 'Sem o id do atendimento não dá pra encerrar automaticamente.';
+    }
+    $busca.hidden = canais.length < 6;
+    renderizar();
+  }
+  atualizarBotao();
 </script>
 </body>
 </html>
