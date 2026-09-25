@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Transferir atendimento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #E9EEF0;
+    --surface: #FFFFFF;
+    --ink: #17252B;
+    --muted: #5E6E75;
+    --line: #D3DCE0;
+    --accent: #0E6A73;
+    --accent-ink: #FFFFFF;
+    --accent-soft: #DCEFF0;
+    --danger: #B3261E;
+    --danger-soft: #FBE9E7;
+    --ok: #1B7A45;
+    --ok-soft: #E3F4EA;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10181B;
+      --surface: #182327;
+      --ink: #E6EEF0;
+      --muted: #93A4AA;
+      --line: #2A393E;
+      --accent: #3FB3BD;
+      --accent-ink: #062226;
+      --accent-soft: #173A3E;
+      --danger: #F2877E;
+      --danger-soft: #3A1E1C;
+      --ok: #6FD39A;
+      --ok-soft: #173325;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.45;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .painel {
+    width: 100%;
+    max-width: 440px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px;
+  }
+  h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+
+  .cliente {
+    display: flex; justify-content: space-between; gap: 12px;
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin: 0 0 16px;
+    font-size: .92rem;
+  }
+  .cliente span:first-child { color: var(--muted); }
+  .cliente strong { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+
+  .busca {
+    width: 100%;
+    font: inherit;
+    color: var(--ink);
+    background: transparent;
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin: 0 0 10px;
+  }
+  .busca:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+
+  .lista { display: grid; gap: 8px; margin: 0 0 18px; padding: 0; border: 0; min-width: 0; }
+  .opcao {
+    position: relative;
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .opcao:hover { border-color: var(--muted); }
+  .opcao input { position: absolute; opacity: 0; pointer-events: none; }
+  .radio {
+    flex: none; width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--line);
+    display: grid; place-items: center;
+  }
+  .radio::after {
+    content: ""; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); transform: scale(0); transition: transform .15s;
+  }
+  .opcao:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  .opcao:has(input:checked) .radio { border-color: var(--accent); }
+  .opcao:has(input:checked) .radio::after { transform: scale(1); }
+  .opcao:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .opcao.atual { cursor: not-allowed; opacity: .55; }
+  .opcao.atual:hover { border-color: var(--line); }
+  .info { display: flex; flex-direction: column; min-width: 0; }
+  .nome { font-weight: 600; overflow-wrap: anywhere; }
+  .tel { color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+  .tag { margin-left: auto; font-size: .78rem; color: var(--muted); white-space: nowrap; }
+
+  .esqueleto { height: 64px; border-radius: 10px; background: var(--line); opacity: .5; animation: pulsa 1.2s ease-in-out infinite; }
+  @keyframes pulsa { 50% { opacity: .25; } }
+
+  .check {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--muted); margin: 0 0 18px; cursor: pointer; user-select: none;
+  }
+  .check input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+  button {
+    width: 100%; font: inherit; font-weight: 600;
+    padding: 13px 16px; border-radius: 10px; border: 0;
+    background: var(--accent); color: var(--accent-ink);
+    cursor: pointer; transition: opacity .15s;
+  }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  button.secundario { background: transparent; color: var(--ink); border: 1.5px solid var(--line); margin-top: 10px; }
+  .spin {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+    vertical-align: -2px; margin-right: 8px;
+    animation: gira .7s linear infinite;
+  }
+  @keyframes gira { to { transform: rotate(360deg); } }
+
+  .aviso { border-radius: 10px; padding: 12px 14px; margin: 0 0 16px; font-size: .93rem; }
+  .aviso.erro { background: var(--danger-soft); color: var(--danger); }
+  .aviso.ok { background: var(--ok-soft); color: var(--ok); }
+  .vazio { color: var(--muted); text-align: center; padding: 20px 0; margin: 0; }
+  [hidden] { display: none !important; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation-duration: 1.5s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="painel">
+  <div id="tela-form">
+    <h1>Transferir atendimento</h1>
+    <p class="sub">Escolha o número que vai continuar a conversa. O cliente recebe uma mensagem de modelo (template) por esse número.</p>
+
+    <div id="aviso" class="aviso erro" role="alert" hidden></div>
+
+    <div class="cliente" id="cliente" hidden>
+      <span>Cliente</span>
+      <strong id="cliente-txt"></strong>
+    </div>
+
+    <input class="busca" id="busca" type="search" placeholder="Buscar número ou nome" aria-label="Buscar número ou nome" hidden>
+
+    <fieldset class="lista" id="lista" aria-label="Número de destino" aria-busy="true">
+      <div class="esqueleto"></div><div class="esqueleto"></div><div class="esqueleto"></div>
+    </fieldset>
+
+    <label class="check">
+      <input type="checkbox" id="encerrar" checked>
+      Encerrar o atendimento atual após transferir
+    </label>
+
+    <button id="btn" type="button" disabled>Carregando…</button>
+  </div>
+
+  <div id="tela-ok" hidden>
+    <h1>Transferido</h1>
+    <div class="aviso ok" id="ok-msg"></div>
+    <div class="aviso erro" id="ok-aviso" hidden></div>
+    <p class="sub" style="margin:0">Quando o cliente responder, a conversa segue no novo número. Pode fechar esta janela.</p>
+    <button class="secundario" type="button" id="btn-nova">Transferir para outro número</button>
+  </div>
+</main>
+
+<script>
+  // Parâmetros que o botão do Helena coloca na URL. Aceita alguns nomes diferentes
+  // pra não depender do nome exato da variável que o Helena gera.
+  const params = new URLSearchParams(window.location.search);
+  const pegar = (...nomes) => { for (const n of nomes) { const v = params.get(n); if (v && !/^\{\{.*\}\}$/.test(v)) return v.trim(); } return ''; };
+
+  const k = pegar('k', 'key', 'chave');
+  const entrada = {
+    sessionId: pegar('sessionId', 'session_id', 'sessao', 'atendimento', 'id_atendimento', 'id_da_sessao'),
+    telefone: pegar('telefone', 'phone', 'telefone_do_contato'),
+    nome: pegar('nome', 'name', 'nome_do_contato'),
+  };
+
+  const $lista = document.getElementById('lista');
+  const $btn = document.getElementById('btn');
+  const $aviso = document.getElementById('aviso');
+  const $encerrar = document.getElementById('encerrar');
+  const $busca = document.getElementById('busca');
+
+  let canais = [];
+  let ctx = null;
+  let selecionado = null;
+  let enviando = false;
+
+  function formatarTel(t) {
+    const d = String(t || '').replace(/\D/g, '');
+    if (d.length === 13 && d.startsWith('55')) return '+55 (' + d.slice(2, 4) + ') ' + d.slice(4, 9) + '-' + d.slice(9);
+    if (d.length === 12 && d.startsWith('55')) return '+55 (' + d.slice(2, 4) + ') ' + d.slice(4, 8) + '-' + d.slice(8);
+    return t || '';
+  }
+
+  function mostrarErro(msg) { $aviso.textContent = msg; $aviso.hidden = false; }
+
+  function atualizarBotao() {
+    if (enviando) return;
+    if (!ctx) { $btn.disabled = true; $btn.textContent = 'Atendimento não identificado'; return; }
+    $btn.disabled = !selecionado;
+    $btn.textContent = selecionado ? 'Transferir para ' + selecionado.nome : 'Selecione um número';
+  }
+
+  function vazio(texto) {
+    $lista.innerHTML = '';
+    const p = document.createElement('p');
+    p.className = 'vazio';
+    p.textContent = texto;
+    $lista.append(p);
+  }
+
+  function renderizar() {
+    $lista.innerHTML = '';
+    $lista.removeAttribute('aria-busy');
+    if (!canais.length) return vazio('Nenhum número disponível para transferência.');
+
+    const filtro = $busca.value.trim().toLowerCase();
+    const filtroDig = filtro.replace(/\D/g, '');
+    const visiveis = canais.filter(function (c) {
+      if (!filtro) return true;
+      return c.nome.toLowerCase().includes(filtro) || (filtroDig && c.telefone.includes(filtroDig));
+    });
+    if (!visiveis.length) return vazio('Nada encontrado.');
+
+    visiveis.forEach(function (c) {
+      const atual = ctx && ctx.canalAtualId && c.id === ctx.canalAtualId;
+      const label = document.createElement('label');
+      label.className = 'opcao' + (atual ? ' atual' : '');
+
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'canal';
+      input.value = c.id;
+      input.disabled = !!atual;
+      input.checked = !!(selecionado && selecionado.id === c.id);
+      input.addEventListener('change', function () { selecionado = c; atualizarBotao(); });
+
+      const radio = document.createElement('span');
+      radio.className = 'radio';
+
+      const info = document.createElement('span');
+      info.className = 'info';
+      const nome = document.createElement('span');
+      nome.className = 'nome';
+      nome.textContent = c.nome;
+      const tel = document.createElement('span');
+      tel.className = 'tel';
+      tel.textContent = formatarTel(c.telefone);
+      info.append(nome, tel);
+
+      label.append(input, radio, info);
+      if (atual) {
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = 'Número atual';
+        label.append(tag);
+      }
+      $lista.append(label);
+    });
+  }
+
+  async function carregar() {
+    if (!entrada.sessionId && !entrada.telefone) {
+      mostrarErro('Não foi possível identificar o atendimento. Abra esta tela pelo botão dentro da conversa.');
+      vazio('Nenhum número carregado.');
+      atualizarBotao();
+      return;
+    }
+    try {
+      const q = new URLSearchParams({ k: k });
+      if (entrada.sessionId) q.set('sessionId', entrada.sessionId);
+      if (entrada.telefone) q.set('telefone', entrada.telefone);
+      if (entrada.nome) q.set('nome', entrada.nome);
+
+      const resp = await fetch('/api/canais?' + q.toString(), { cache: 'no-store' });
+      const data = await resp.json().catch(function () { return {}; });
+      if (!resp.ok || !data.ok) throw new Error(data.erro || 'Erro ' + resp.status + ' ao carregar os números.');
+
+      canais = data.canais || [];
+      ctx = { sessionId: data.sessionId, canalAtualId: data.canalAtualId, cliente: data.cliente || {} };
+
+      const cli = ctx.cliente;
+      if (cli.nome || cli.telefone) {
+        document.getElementById('cliente-txt').textContent =
+          [cli.nome, formatarTel(cli.telefone)].filter(Boolean).join(' · ');
+        document.getElementById('cliente').hidden = false;
+      }
+      if (!ctx.sessionId) {
+        $encerrar.checked = false;
+        $encerrar.disabled = true;
+        $encerrar.parentElement.title = 'Sem o id do atendimento não dá pra encerrar automaticamente.';
+      }
+      $busca.hidden = canais.length < 6;
+      renderizar();
+    } catch (e) {
+      mostrarErro(e.message || 'Não consegui carregar os números.');
+      vazio('Nenhum número carregado.');
+    }
+    atualizarBotao();
+  }
+
+  async function transferir() {
+    if (!selecionado || !ctx || enviando) return;
+    enviando = true;
+    $aviso.hidden = true;
+    $btn.disabled = true;
+    $btn.innerHTML = '<span class="spin" aria-hidden="true"></span>Transferindo…';
+
+    try {
+      const resp = await fetch('/api/transferir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          k: k,
+          sessionId: entrada.sessionId || null,
+          telefone: entrada.telefone || null,
+          nome: entrada.nome || null,
+          canalDestinoId: selecionado.id,
+          encerrarOrigem: $encerrar.checked,
+        }),
+      });
+      const data = await resp.json().catch(function () { return {}; });
+      if (!resp.ok || !data.ok) throw new Error(data.erro || 'O servidor respondeu com erro ' + resp.status + '.');
+
+      document.getElementById('ok-msg').textContent =
+        'Template enviado pelo número ' + selecionado.nome + ' (' + formatarTel(selecionado.telefone) + ').' +
+        (data.encerrado ? ' O atendimento atual foi encerrado.' : '');
+      const $okAviso = document.getElementById('ok-aviso');
+      $okAviso.hidden = !data.aviso;
+      $okAviso.textContent = data.aviso || '';
+      document.getElementById('tela-form').hidden = true;
+      document.getElementById('tela-ok').hidden = false;
+    } catch (e) {
+      mostrarErro('A transferência não foi feita. ' + (e.message || 'Verifique a conexão e tente de novo.'));
+    } finally {
+      enviando = false;
+      atualizarBotao();
+    }
+  }
+
+  $btn.addEventListener('click', transferir);
+  $busca.addEventListener('input', renderizar);
+  document.getElementById('btn-nova').addEventListener('click', function () {
+    document.getElementById('tela-ok').hidden = true;
+    document.getElementById('tela-form').hidden = false;
+  });
+
+  carregar();
+</script>
+</body>
+</html>
