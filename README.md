@@ -40,12 +40,12 @@ Aberta direto pela Vercel, a tela mostra "Atendimento não identificado". É o e
 2. **Credencial do Helena:** crie uma credencial *Header Auth* com Name `Authorization` e Value `Bearer SEU_TOKEN` (token em Configurações → Integrações → Integração via API do Helena). Selecione essa credencial nos 7 nós HTTP que chamam `api.helena.run`.
 3. **Baixar HTML (Vercel):** troque `https://SEU-PROJETO.vercel.app/` pela URL da Vercel.
 4. **Chave de acesso:** troque `TROCAR_POR_CHAVE_FORTE` por uma senha longa e aleatória nos **dois** nós IF: `Chave válida (tela)?` e `Chave válida?`.
-5. **Validar pedido:** ajuste `TEMPLATE_NAME` se o template tiver outro nome.
+5. **Validar pedido:** confira o `MAPA_TEMPLATE` (número → template).
 6. **Ative** o workflow. O botão precisa usar a URL de produção (`/webhook/`), não a de teste (`/webhook-test/`).
 
 ## 3. Template em cada número
 
-Cada número de destino precisa ter um template **aprovado** com o nome definido em `TEMPLATE_NAME` (padrão `transferencia_atendimento`). Como o id do template muda de número pra número, o fluxo procura pelo nome. Se algum número usar outro template, cadastre em `MAPA_TEMPLATE` no nó *Validar pedido*.
+O template de cada número fica em `MAPA_TEMPLATE`, no nó *Validar pedido* (chave = DDD + número; valor = nome ou id do template). Número fora do mapa usa `TEMPLATE_PADRAO`. O template precisa estar **aprovado** no próprio número de destino.
 
 Variáveis que o fluxo preenche sozinho, se existirem no template:
 
