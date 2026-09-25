@@ -320,7 +320,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ================= CONFIG =================\n// Template usado em cada número de destino (nome ou id do template).\n// Chave = DDD + número (com ou sem 55 na frente, tanto faz).\nconst MAPA_TEMPLATE = {\n  '5140034215': 'd94b6_tranferencia',\n  '4840034215': 'e2d5c_tranferencia',\n  '4940034215': 'c51eb_tranferencia',\n  '4740034215': '47b83_tranferencia',\n};\n// Usado se o número não estiver no mapa acima\nconst TEMPLATE_PADRAO = 'transferencia_atendimento';\n// ==========================================\n\nconst d = (v) => String(v || '').replace(/\\D/g, '');\nconst fim10 = (v) => d(v).slice(-10); // DDD + número, ignora o 55\nconst b = $('Webhook Transferir').first().json.body || {};\nconst falha = (erro) => [{ json: { ok: false, erro } }];\n\nconst canais = $('Listar canais (T)').all().map((i) => i.json)\n  .filter((c) => c && !c.error && c.id && d(c.number));\nconst nomeDe = (c) => c.identity?.displayName || c.numberFormatted || d(c.number);\n\nconst s = $input.first().json || {};\nconst temSessao = !s.error && !!s.id;\nconst canalAtualId = temSessao ? s.channelId : '';\nconst cliente = {\n  nome: (temSessao && s.contactDetails?.name) || b.nome || '',\n  telefone: d((temSessao && s.contactDetails?.phonenumber) || b.telefone),\n};\n\n// O telefone de destino sai da lista da conta, nunca do navegador.\nconst destino = canais.find((c) => c.id === b.canalDestinoId);\nconst origem = canais.find((c) => c.id === canalAtualId);\n\nif (!canais.length) return falha('Não consegui listar os números da conta. Verifique a credencial do Helena no n8n.');\nif (!destino) return falha('Número de destino inválido.');\nif (destino.id === canalAtualId) return falha('Esse já é o número do atendimento atual.');\nif (b.sessionId && !temSessao) return falha('Não achei esse atendimento no Helena.');\nif (!cliente.telefone) return falha('Não achei o telefone do cliente nesse atendimento.');\n\nconst chave = Object.keys(MAPA_TEMPLATE).find((k) => fim10(k) === fim10(destino.number)) || destino.id;\nconst template = MAPA_TEMPLATE[chave] || TEMPLATE_PADRAO;\n\nreturn [{ json: {\n  ok: true,\n  sessionId: temSessao ? s.id : '',\n  encerrar: b.encerrarOrigem === true && temSessao,\n  cliente,\n  destino: { id: destino.id, telefone: d(destino.number), nome: nomeDe(destino) },\n  origemNome: origem ? nomeDe(origem) : '',\n  template,\n} }];"
+        "jsCode": "// ================= CONFIG =================\n// Modelo enviado por cada número de destino.\n// Chave = DDD + número (com ou sem 55, tanto faz).\n// id        = ID do modelo no Helena (é o que a API aceita, não o nome)\n// variaveis = variáveis que o texto do modelo usa. Vazio [] se não tiver.\n//             Preenchidas sozinhas: nome, nome_completo, telefone, empresa_origem\nconst MAPA_TEMPLATE = {\n  '5140034215': { id: 'COLE_AQUI_O_ID_d94b6_tranferencia', variaveis: [] },\n  '4840034215': { id: 'COLE_AQUI_O_ID_e2d5c_tranferencia', variaveis: [] },\n  '4940034215': { id: 'COLE_AQUI_O_ID_c51eb_tranferencia', variaveis: [] },\n  '4740034215': { id: 'COLE_AQUI_O_ID_68807_fupdcomercial', variaveis: [] }, // TESTE — depois trocar pelo 47b83_tranferencia\n};\n// ==========================================\n\nconst d = (v) => String(v || '').replace(/\\D/g, '');\nconst fim10 = (v) => d(v).slice(-10); // DDD + número, ignora o 55\nconst b = $('Webhook Transferir').first().json.body || {};\nconst falha = (erro) => [{ json: { ok: false, erro } }];\n\nconst canais = $('Listar canais (T)').all().map((i) => i.json)\n  .filter((c) => c && !c.error && c.id && d(c.number));\nconst nomeDe = (c) => c.identity?.displayName || c.numberFormatted || d(c.number);\n\nconst s = $input.first().json || {};\nconst temSessao = !s.error && !!s.id;\nconst canalAtualId = temSessao ? s.channelId : '';\nconst cliente = {\n  nome: (temSessao && s.contactDetails?.name) || b.nome || '',\n  telefone: d((temSessao && s.contactDetails?.phonenumber) || b.telefone),\n};\n\n// O telefone de destino sai da lista da conta, nunca do navegador.\nconst destino = canais.find((c) => c.id === b.canalDestinoId);\nconst origem = canais.find((c) => c.id === canalAtualId);\n\nif (!canais.length) return falha('Não consegui listar os números da conta. Verifique a credencial do Helena no n8n.');\nif (!destino) return falha('Número de destino inválido.');\nif (destino.id === canalAtualId) return falha('Esse já é o número do atendimento atual.');\nif (b.sessionId && !temSessao) return falha('Não achei esse atendimento no Helena.');\nif (!cliente.telefone) return falha('Não achei o telefone do cliente nesse atendimento.');\n\nconst chave = Object.keys(MAPA_TEMPLATE).find((k) => fim10(k) === fim10(destino.number));\nconst modelo = chave && MAPA_TEMPLATE[chave];\nif (!modelo || !modelo.id || modelo.id.startsWith('COLE_AQUI')) {\n  return falha('O número ' + nomeDe(destino) + ' não tem modelo configurado.');\n}\n\nreturn [{ json: {\n  ok: true,\n  sessionId: temSessao ? s.id : '',\n  encerrar: b.encerrarOrigem === true && temSessao,\n  cliente,\n  destino: { id: destino.id, telefone: d(destino.number), nome: nomeDe(destino) },\n  origemNome: origem ? nomeDe(origem) : '',\n  modelo: { id: modelo.id, variaveis: modelo.variaveis || [] },\n} }];"
       },
       "id": "8ea146fe-bd06-423d-b92f-6519a1db95bb",
       "name": "Validar pedido",
@@ -383,52 +383,7 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "=https://api.helena.run/chat/v1/template?channelId={{ $json.destino.id }}&archived=false&pageSize=100",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "accept",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "pagination": {
-            "pagination": {
-              "parameters": {
-                "parameters": [
-                  {
-                    "type": "qs",
-                    "name": "pageNumber",
-                    "value": "={{ $pageCount + 1 }}"
-                  }
-                ]
-              },
-              "paginationCompleteWhen": "other",
-              "completeExpression": "={{ !$response.body.hasMorePages }}",
-              "limitPagesFetched": true,
-              "maxRequests": 30
-            }
-          }
-        }
-      },
-      "id": "22a3fd07-f646-4d33-ad0a-4608ca7670de",
-      "name": "Buscar template",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1320,
-        460
-      ],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const p = $('Validar pedido').first().json;\n// \"Buscar template\" pagina: junta os templates de todas as páginas\nconst itens = $input.all().flatMap((i) => (Array.isArray(i.json.items) ? i.json.items : []));\nconst alvo = String(p.template || '').trim();\nconst ehId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(alvo);\nconst limpo = (n) => String(n || '').replace(/^\\[[^\\]]*\\]\\s*/, '').trim(); // tira \"[IMPORTADO] \"\n\n// Procura por id, nome exato, ou nome sem o prefixo \"[IMPORTADO] \"\nconst achados = itens.filter((t) => t.id === alvo || t.name === alvo || limpo(t.name) === alvo);\nconst aprovado = achados.find((t) => String(t.status).toLowerCase() === 'approved');\nconst tpl = aprovado || (ehId && !achados.length ? { id: alvo, params: [] } : null);\n\nif (!tpl) {\n  const status = achados[0] ? ' (status no Helena: ' + achados[0].status + ')' : '';\n  return [{ json: { ok: false, erro: 'O número ' + p.destino.nome + ' não tem o modelo \"' + alvo + '\" aprovado' + status + '.' } }];\n}\n\n// Variáveis do template preenchidas com o que se sabe do cliente.\n// A Meta recusa variável vazia, então sempre vai algum valor.\nconst primeiro = (p.cliente.nome || '').trim().split(/\\s+/)[0] || '';\nconst valores = {\n  nome: primeiro, primeiro_nome: primeiro, nome_cliente: primeiro,\n  nome_completo: (p.cliente.nome || '').trim(),\n  telefone: p.cliente.telefone,\n  empresa_origem: p.origemNome, canal_origem: p.origemNome,\n};\nconst parameters = {};\nfor (const par of (tpl.params || [])) {\n  const k = String(par.name || '');\n  if (!k) continue;\n  const v = valores[k.toLowerCase()] ?? (k.toLowerCase().includes('nome') ? primeiro : '');\n  parameters[k] = v || (k.toLowerCase().includes('nome') ? 'cliente' : '-');\n}\n\nconst body = { templateId: tpl.id };\nif (Object.keys(parameters).length) body.parameters = parameters;\n\nreturn [{ json: {\n  ok: true,\n  payload: {\n    from: p.destino.telefone,\n    to: p.cliente.telefone,\n    body,\n    options: { enableBot: false, hiddenSession: false, forceStartSession: true },\n  },\n} }];"
+        "jsCode": "const p = $('Validar pedido').first().json;\n\n// Variáveis do modelo preenchidas com o que se sabe do cliente.\n// A Meta recusa variável vazia, então sempre vai algum valor.\nconst primeiro = (p.cliente.nome || '').trim().split(/\\s+/)[0] || '';\nconst valores = {\n  nome: primeiro, primeiro_nome: primeiro, nome_cliente: primeiro,\n  nome_completo: (p.cliente.nome || '').trim(),\n  telefone: p.cliente.telefone,\n  empresa_origem: p.origemNome, canal_origem: p.origemNome,\n};\nconst parameters = {};\nfor (const k of p.modelo.variaveis) {\n  const v = valores[String(k).toLowerCase()] ?? (String(k).toLowerCase().includes('nome') ? primeiro : '');\n  parameters[k] = v || (String(k).toLowerCase().includes('nome') ? 'cliente' : '-');\n}\n\nconst body = { templateId: p.modelo.id };\nif (Object.keys(parameters).length) body.parameters = parameters;\n\nreturn [{ json: {\n  ok: true,\n  payload: {\n    from: p.destino.telefone,\n    to: p.cliente.telefone,\n    body,\n    options: { enableBot: false, hiddenSession: false, forceStartSession: true },\n  },\n} }];"
       },
       "id": "138ec0fc-a9a3-4425-a451-6b75a4688648",
       "name": "Montar envio",
@@ -786,24 +741,6 @@
       "main": [
         [
           {
-            "node": "Buscar template",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Responder erro",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Buscar template": {
-      "main": [
-        [
-          {
             "node": "Montar envio",
             "type": "main",
             "index": 0
@@ -811,7 +748,7 @@
         ],
         [
           {
-            "node": "Responder erro API",
+            "node": "Responder erro",
             "type": "main",
             "index": 0
           }
