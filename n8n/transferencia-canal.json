@@ -384,7 +384,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.helena.run/chat/v1/template?channelId={{ $json.destino.id }}&approvedOnly=true&archived=false&pageSize=100&name={{ encodeURIComponent($json.template) }}",
+        "url": "=https://api.helena.run/chat/v1/template?channelId={{ $json.destino.id }}&archived=false&pageSize=100",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
@@ -396,7 +396,25 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "pagination": {
+            "pagination": {
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "pageNumber",
+                    "value": "={{ $pageCount + 1 }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.hasMorePages }}",
+              "limitPagesFetched": true,
+              "maxRequests": 30
+            }
+          }
+        }
       },
       "id": "22a3fd07-f646-4d33-ad0a-4608ca7670de",
       "name": "Buscar template",
@@ -410,7 +428,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const p = $('Validar pedido').first().json;\nconst r = $input.first().json || {};\nconst itens = Array.isArray(r.items) ? r.items : [];\nconst alvo = String(p.template || '');\nconst ehId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(alvo);\n\n// Procura por id, nome exato, ou nome com/sem o prefixo (ex.: \"d94b6_tranferencia\" x \"tranferencia\")\nconst tpl = itens.find((t) => t.id === alvo)\n  || itens.find((t) => t.name === alvo)\n  || itens.find((t) => t.name && (alvo.endsWith('_' + t.name) || String(t.name).endsWith(alvo)))\n  || (ehId ? { id: alvo, params: [] } : null);\n\nif (!tpl) {\n  return [{ json: { ok: false, erro: 'O número ' + p.destino.nome + ' não tem o modelo \"' + alvo + '\" aprovado.' } }];\n}\n\n// Variáveis do template preenchidas com o que se sabe do cliente.\n// A Meta recusa variável vazia, então sempre vai algum valor.\nconst primeiro = (p.cliente.nome || '').trim().split(/\\s+/)[0] || '';\nconst valores = {\n  nome: primeiro, primeiro_nome: primeiro, nome_cliente: primeiro,\n  nome_completo: (p.cliente.nome || '').trim(),\n  telefone: p.cliente.telefone,\n  empresa_origem: p.origemNome, canal_origem: p.origemNome,\n};\nconst parameters = {};\nfor (const par of (tpl.params || [])) {\n  const k = String(par.name || '');\n  if (!k) continue;\n  const v = valores[k.toLowerCase()] ?? (k.toLowerCase().includes('nome') ? primeiro : '');\n  parameters[k] = v || (k.toLowerCase().includes('nome') ? 'cliente' : '-');\n}\n\nconst body = { templateId: tpl.id };\nif (Object.keys(parameters).length) body.parameters = parameters;\n\nreturn [{ json: {\n  ok: true,\n  payload: {\n    from: p.destino.telefone,\n    to: p.cliente.telefone,\n    body,\n    options: { enableBot: false, hiddenSession: false, forceStartSession: true },\n  },\n} }];"
+        "jsCode": "const p = $('Validar pedido').first().json;\n// \"Buscar template\" pagina: junta os templates de todas as páginas\nconst itens = $input.all().flatMap((i) => (Array.isArray(i.json.items) ? i.json.items : []));\nconst alvo = String(p.template || '').trim();\nconst ehId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(alvo);\nconst limpo = (n) => String(n || '').replace(/^\\[[^\\]]*\\]\\s*/, '').trim(); // tira \"[IMPORTADO] \"\n\n// Procura por id, nome exato, ou nome sem o prefixo \"[IMPORTADO] \"\nconst achados = itens.filter((t) => t.id === alvo || t.name === alvo || limpo(t.name) === alvo);\nconst aprovado = achados.find((t) => String(t.status).toLowerCase() === 'approved');\nconst tpl = aprovado || (ehId && !achados.length ? { id: alvo, params: [] } : null);\n\nif (!tpl) {\n  const status = achados[0] ? ' (status no Helena: ' + achados[0].status + ')' : '';\n  return [{ json: { ok: false, erro: 'O número ' + p.destino.nome + ' não tem o modelo \"' + alvo + '\" aprovado' + status + '.' } }];\n}\n\n// Variáveis do template preenchidas com o que se sabe do cliente.\n// A Meta recusa variável vazia, então sempre vai algum valor.\nconst primeiro = (p.cliente.nome || '').trim().split(/\\s+/)[0] || '';\nconst valores = {\n  nome: primeiro, primeiro_nome: primeiro, nome_cliente: primeiro,\n  nome_completo: (p.cliente.nome || '').trim(),\n  telefone: p.cliente.telefone,\n  empresa_origem: p.origemNome, canal_origem: p.origemNome,\n};\nconst parameters = {};\nfor (const par of (tpl.params || [])) {\n  const k = String(par.name || '');\n  if (!k) continue;\n  const v = valores[k.toLowerCase()] ?? (k.toLowerCase().includes('nome') ? primeiro : '');\n  parameters[k] = v || (k.toLowerCase().includes('nome') ? 'cliente' : '-');\n}\n\nconst body = { templateId: tpl.id };\nif (Object.keys(parameters).length) body.parameters = parameters;\n\nreturn [{ json: {\n  ok: true,\n  payload: {\n    from: p.destino.telefone,\n    to: p.cliente.telefone,\n    body,\n    options: { enableBot: false, hiddenSession: false, forceStartSession: true },\n  },\n} }];"
       },
       "id": "138ec0fc-a9a3-4425-a451-6b75a4688648",
       "name": "Montar envio",
