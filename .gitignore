@@ -3,3 +3,6 @@ node_modules/
 .env.*
 !.env.example
 .vercel/
+
+# Fluxos por empresa (têm chave de acesso): não versionar
+n8n/empresas/
