@@ -134,7 +134,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://SEU-PROJETO.vercel.app/",
+        "url": "https://transferenciadeinstacia.vercel.app/",
         "options": {
           "response": {
             "response": {
